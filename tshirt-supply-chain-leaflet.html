@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global T-Shirt Supply Chain - Interactive Map</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Custom map styling - green continents, blue water */
+        .leaflet-tile {
+            filter: hue-rotate(120deg) saturate(1.5) brightness(0.9);
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .title-card {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            pointer-events: auto;
+            animation: slideInLeft 0.8s ease-out;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .title-card h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #60A5FA, #34D399, #FBBF24);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .title-card p {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 400;
+        }
+
+        .controls-panel {
+            position: absolute;
+            bottom: 40px;
+            right: 380px;
+            display: flex;
+            gap: 12px;
+            pointer-events: auto;
+            animation: slideInRight 0.8s ease-out;
+            z-index: 1600;
+        }
+
+        @media (max-width: 1200px) {
+            .controls-panel {
+                right: 320px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .controls-panel {
+                right: 40px;
+                bottom: 260px;
+            }
+        }
+
+        .control-btn {
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 12px 20px;
+            color: white;
+            font-family: inherit;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4);
+        }
+
+        .control-btn.active {
+            background: linear-gradient(135deg, #60A5FA, #34D399);
+            border-color: transparent;
+        }
+
+        .progress-bar {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 300px;
+            pointer-events: auto;
+            animation: slideInLeft 0.8s ease-out 0.2s both;
+        }
+
+        .progress-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .progress-track {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #60A5FA, #34D399, #FBBF24);
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Custom supply chain markers */
+        .supply-chain-marker {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #333;
+            font-weight: bold;
+            border: 3px solid white;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            background: white !important;
+        }
+
+        .supply-chain-marker::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+            opacity: 1;
+        }
+
+        .supply-chain-marker .icon-emoji {
+            position: relative;
+            z-index: 2;
+        }
+
+        .supply-chain-marker.active {
+            animation: pulse 2s infinite;
+            transform: scale(1.1);
+        }
+
+        .supply-chain-marker.cotton-farm {
+            background: linear-gradient(135deg, #34D399, #10B981);
+        }
+
+        .supply-chain-marker.textile-mill {
+            background: linear-gradient(135deg, #FBBF24, #F59E0B);
+        }
+
+        .supply-chain-marker.garment-factory {
+            background: linear-gradient(135deg, #F472B6, #EC4899);
+        }
+
+        .supply-chain-marker.distribution {
+            background: linear-gradient(135deg, #60A5FA, #3B82F6);
+        }
+
+        .supply-chain-marker.retail {
+            background: linear-gradient(135deg, #A78BFA, #8B5CF6);
+        }
+
+        /* Custom popup styling */
+        .leaflet-popup-content-wrapper {
+            background: rgba(26, 26, 26, 0.95) !important;
+            backdrop-filter: blur(20px);
+            border-radius: 16px !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white !important;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+        }
+
+        .leaflet-popup-content {
+            color: white !important;
+            margin: 20px !important;
+        }
+
+        .leaflet-popup-tip {
+            background: rgba(26, 26, 26, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .popup-content h3 {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: white;
+        }
+
+        .popup-content .location {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .popup-content .description {
+            line-height: 1.5;
+            margin-bottom: 12px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .popup-content .stats {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+        }
+
+        .popup-content .stat {
+            text-align: center;
+        }
+
+        .popup-content .stat-value {
+            font-weight: 600;
+            color: white;
+        }
+
+        .popup-content .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Tier information display - Fixed position top-right */
+        .tier-info-display {
+            position: absolute;
+            top: 120px;
+            right: 40px;
+            width: 350px;
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6);
+            opacity: 0;
+            transform: translateX(20px) scale(0.95);
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+            z-index: 2000;
+        }
+
+        .tier-info-display.visible {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+        }
+
+        .tier-info-display .tier-number {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 500;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .tier-info-display .tier-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #60A5FA, #34D399, #FBBF24);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.1;
+        }
+
+        .tier-info-display .tier-location {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 400;
+            margin-bottom: 16px;
+        }
+
+        .tier-info-display .tier-description {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.5;
+        }
+
+        /* Supply Chain Flow Panel */
+        .flow-panel {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            width: 320px;
+            height: calc(100vh - 200px);
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            color: white;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            z-index: 1500;
+            animation: slideInRight 0.8s ease-out 0.4s both;
+            overflow-y: auto;
+        }
+
+        .flow-panel h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .flow-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+        }
+
+        .flow-tier {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.4s ease;
+            position: relative;
+        }
+
+        .flow-tier.active {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateX(-4px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .flow-tier.completed {
+            background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(16, 185, 129, 0.1));
+            border-color: rgba(52, 211, 153, 0.4);
+        }
+
+        .tier-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.7);
+            transition: all 0.4s ease;
+            flex-shrink: 0;
+        }
+
+        .flow-tier.active .tier-number {
+            background: linear-gradient(135deg, #60A5FA, #34D399);
+            border-color: white;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .flow-tier.completed .tier-number {
+            background: linear-gradient(135deg, #34D399, #10B981);
+            border-color: #34D399;
+            color: white;
+        }
+
+        .tier-content {
+            flex: 1;
+        }
+
+        .tier-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: white;
+        }
+
+        .tier-location {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 6px;
+        }
+
+        .tier-description {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            line-height: 1.4;
+        }
+
+        .tier-icon {
+            font-size: 20px;
+            opacity: 0.7;
+            transition: all 0.4s ease;
+        }
+
+        .flow-tier.active .tier-icon {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        /* Flow connection lines */
+        .flow-connection {
+            position: absolute;
+            left: 39px;
+            top: 48px;
+            bottom: -16px;
+            width: 2px;
+            background: linear-gradient(to bottom, 
+                rgba(255, 255, 255, 0.2) 0%, 
+                rgba(255, 255, 255, 0.1) 50%, 
+                rgba(255, 255, 255, 0.2) 100%);
+            z-index: -1;
+        }
+
+        .flow-tier:last-child .flow-connection {
+            display: none;
+        }
+
+        .flow-connection.active {
+            background: linear-gradient(to bottom, 
+                #60A5FA 0%, 
+                #34D399 50%, 
+                #FBBF24 100%);
+            box-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+        }
+
+        /* Style Leaflet attribution to match theme */
+        .leaflet-control-attribution {
+            background: rgba(26, 26, 26, 0.9) !important;
+            color: rgba(255, 255, 255, 0.7) !important;
+            border-radius: 8px !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+
+        .leaflet-control-attribution a {
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4), 0 0 0 0 currentColor;
+            }
+            50% {
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4), 0 0 0 20px transparent;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="ui-overlay">
+        <div class="title-card">
+            <h1>Global T-Shirt Supply Chain</h1>
+            <p>From cotton fields to retail stores worldwide</p>
+        </div>
+
+        <div class="controls-panel">
+            <button class="control-btn" onclick="startJourney()" id="startBtn">Start Journey</button>
+            <button class="control-btn" onclick="resetView()">Reset</button>
+            <button class="control-btn" onclick="toggleSpeed()" id="speedBtn">1x Speed</button>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-label">Supply Chain Progress</div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div class="tier-info-display" id="tierInfoDisplay">
+            <div class="tier-number" id="tierNumber">Tier 0</div>
+            <div class="tier-title" id="tierTitle">Cotton Farm</div>
+            <div class="tier-location" id="tierLocation">Gujarat, India</div>
+            <div class="tier-description" id="tierDescription">Sustainable cotton cultivation using modern irrigation techniques</div>
+        </div>
+
+        <div class="flow-panel">
+            <h3>Supply Chain Flow</h3>
+            <div class="flow-container" id="flowContainer">
+                <!-- Flow tiers will be dynamically generated -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map
+        const map = L.map('map', {
+            center: [20, 40],
+            zoom: 3,
+            minZoom: 2,
+            maxZoom: 18,
+            zoomControl: false
+        });
+
+        // Add cleaner map tiles with minimal labels (CartoDB Positron base with custom styling)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors © CARTO',
+            subdomains: 'abcd',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Add selective labels layer (only major cities and countries)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+            attribution: '',
+            subdomains: 'abcd',
+            maxZoom: 19,
+            minZoom: 4  // Only show labels at zoom level 4 and above to filter out small cities
+        }).addTo(map);
+
+        // Add zoom control to bottom right
+        L.control.zoom({
+            position: 'bottomright'
+        }).addTo(map);
+
+        // Animation state
+        let currentStage = 0;
+        let isAnimating = false;
+        let speed = 1;
+        let animationInterval;
+
+        // Supply chain data with precise coordinates (Farm to Store - Tier 0 = Farm)
+        const supplyChainNodes = [
+            {
+                id: 'cotton-farm',
+                name: 'Cotton Farm',
+                location: 'Gujarat, India',
+                description: 'Sustainable cotton cultivation using modern irrigation techniques and organic farming practices.',
+                lat: 23.0225, lng: 72.5714,
+                color: '#34D399',
+                stats: { value1: '2.5M', label1: 'Hectares', value2: '180K', label2: 'Workers' },
+                icon: '🌱',
+                className: 'cotton-farm',
+                tier: 0
+            },
+            {
+                id: 'textile-mill',
+                name: 'Textile Mill',
+                location: 'Tamil Nadu, India',
+                description: 'Advanced spinning and weaving facilities with eco-friendly processes and renewable energy.',
+                lat: 11.1271, lng: 78.6569,
+                color: '#FBBF24',
+                stats: { value1: '450K', label1: 'Tonnes/Year', value2: '25K', label2: 'Workers' },
+                icon: '🏭',
+                className: 'textile-mill',
+                tier: 1
+            },
+            {
+                id: 'garment-factory',
+                name: 'Garment Factory',
+                location: 'Ho Chi Minh City, Vietnam',
+                description: 'State-of-the-art garment manufacturing with fair labor practices and quality control.',
+                lat: 10.8231, lng: 106.6297,
+                color: '#F472B6',
+                stats: { value1: '50M', label1: 'Units/Year', value2: '15K', label2: 'Workers' },
+                icon: '👕',
+                className: 'garment-factory',
+                tier: 2
+            },
+            {
+                id: 'distribution',
+                name: 'Distribution Hub',
+                location: 'Shanghai, China',
+                description: 'Global logistics center with automated warehousing systems and AI-driven inventory management.',
+                lat: 31.2304, lng: 121.4737,
+                color: '#60A5FA',
+                stats: { value1: '2.8M', label1: 'Sq Ft', value2: '500+', label2: 'Destinations' },
+                icon: '📦',
+                className: 'distribution',
+                tier: 3
+            },
+            {
+                id: 'retail',
+                name: 'Retail Store',
+                location: 'New York, USA',
+                description: 'Premium retail experience with sustainable fashion focus and customer engagement.',
+                lat: 40.7589, lng: -73.9851,
+                color: '#A78BFA',
+                stats: { value1: '12K', label1: 'Products', value2: '2.5M', label2: 'Customers' },
+                icon: '🏪',
+                className: 'retail',
+                tier: 4
+            }
+        ];
+
+        // Cache DOM elements for performance
+        let flowTierElements = [];
+
+        // Initialize flow panel
+        function initializeFlowPanel() {
+            const flowContainer = document.getElementById('flowContainer');
+            const fragment = document.createDocumentFragment();
+            flowTierElements = [];
+
+            supplyChainNodes.forEach((node, index) => {
+                const tierElement = document.createElement('div');
+                tierElement.className = 'flow-tier';
+                tierElement.id = `flow-tier-${index}`;
+                
+                tierElement.innerHTML = `
+                    <div class="tier-number">${node.tier}</div>
+                    <div class="tier-content">
+                        <div class="tier-title">${node.name}</div>
+                        <div class="tier-location">${node.location}</div>
+                        <div class="tier-description">${node.description.substring(0, 50)}...</div>
+                    </div>
+                    <div class="tier-icon">${node.icon}</div>
+                    ${index < supplyChainNodes.length - 1 ? '<div class="flow-connection"></div>' : ''}
+                `;
+                
+                flowTierElements.push({
+                    element: tierElement,
+                    connection: index < supplyChainNodes.length - 1 ? tierElement.querySelector('.flow-connection') : null
+                });
+                
+                fragment.appendChild(tierElement);
+            });
+            
+            flowContainer.appendChild(fragment);
+        }
+
+        // Optimized flow panel update
+        let flowUpdateQueued = false;
+        
+        function updateFlowPanel() {
+            if (flowUpdateQueued) return;
+            flowUpdateQueued = true;
+            
+            requestAnimationFrame(() => {
+                flowTierElements.forEach((tierData, index) => {
+                    const { element, connection } = tierData;
+                    
+                    const isCompleted = index < currentStage;
+                    const isActive = index === currentStage;
+                    
+                    const hasActive = element.classList.contains('active');
+                    const hasCompleted = element.classList.contains('completed');
+                    
+                    if (isActive && !hasActive) {
+                        element.classList.remove('completed');
+                        element.classList.add('active');
+                    } else if (isCompleted && !hasCompleted) {
+                        element.classList.remove('active');
+                        element.classList.add('completed');
+                    } else if (!isActive && !isCompleted) {
+                        element.classList.remove('active', 'completed');
+                    }
+                    
+                    if (connection) {
+                        const shouldBeActive = index < currentStage;
+                        const connectionIsActive = connection.classList.contains('active');
+                        
+                        if (shouldBeActive && !connectionIsActive) {
+                            connection.classList.add('active');
+                        } else if (!shouldBeActive && connectionIsActive) {
+                            connection.classList.remove('active');
+                        }
+                    }
+                });
+                
+                flowUpdateQueued = false;
+            });
+        }
+
+        // Create custom markers
+        const markers = [];
+        const connections = [];
+
+        // Function to create custom marker HTML
+        function createMarkerHTML(node, isActive = false) {
+            return `
+                <div class="supply-chain-marker ${node.className} ${isActive ? 'active' : ''}">
+                    <span class="icon-emoji">${node.icon}</span>
+                </div>
+            `;
+        }
+
+        // Function to create popup content
+        function createPopupContent(node) {
+            return `
+                <div class="popup-content">
+                    <h3>${node.name}</h3>
+                    <div class="location">${node.location}</div>
+                    <div class="description">${node.description}</div>
+                    <div class="stats">
+                        <div class="stat">
+                            <div class="stat-value">${node.stats.value1}</div>
+                            <div class="stat-label">${node.stats.label1}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">${node.stats.value2}</div>
+                            <div class="stat-label">${node.stats.label2}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add markers to map
+        supplyChainNodes.forEach((node, index) => {
+            const marker = L.marker([node.lat, node.lng], {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: createMarkerHTML(node),
+                    iconSize: [50, 50],
+                    iconAnchor: [25, 25]
+                })
+            }).addTo(map);
+
+            marker.bindPopup(createPopupContent(node), {
+                maxWidth: 300,
+                className: 'custom-popup'
+            });
+
+            markers.push(marker);
+        });
+
+        // Cache connection states for performance
+        let connectionStates = new Array(supplyChainNodes.length - 1).fill(false);
+
+        // Optimized connection updates
+        function createConnections() {
+            if (connections.length === 0) {
+                for (let i = 0; i < supplyChainNodes.length - 1; i++) {
+                    const fromNode = supplyChainNodes[i];
+                    const toNode = supplyChainNodes[i + 1];
+                    
+                    const polyline = L.polyline(
+                        [[fromNode.lat, fromNode.lng], [toNode.lat, toNode.lng]], 
+                        {
+                            color: 'rgba(255, 255, 255, 0.3)',
+                            weight: 2,
+                            opacity: 0.4,
+                            className: 'supply-chain-line'
+                        }
+                    ).addTo(map);
+
+                    connections.push(polyline);
+                }
+            }
+            
+            updateConnections();
+        }
+
+        function updateConnections() {
+            connections.forEach((connection, i) => {
+                const isActive = i < currentStage;
+                const previousState = connectionStates[i];
+                
+                if (previousState !== isActive) {
+                    const fromNode = supplyChainNodes[i];
+                    connection.setStyle({
+                        color: isActive ? fromNode.color : 'rgba(255, 255, 255, 0.3)',
+                        weight: isActive ? 4 : 2,
+                        opacity: isActive ? 0.8 : 0.4
+                    });
+                    connectionStates[i] = isActive;
+                }
+            });
+        }
+
+        // Cache marker states for performance
+        let markerStates = new Array(supplyChainNodes.length).fill(null);
+
+        // Optimized marker updates
+        function updateMarkers() {
+            let hasChanges = false;
+            
+            markers.forEach((marker, index) => {
+                const node = supplyChainNodes[index];
+                const isCurrent = index === currentStage;
+                const previousState = markerStates[index];
+                
+                if (previousState !== isCurrent) {
+                    marker.setIcon(L.divIcon({
+                        className: 'custom-marker',
+                        html: createMarkerHTML(node, isCurrent),
+                        iconSize: [50, 50],
+                        iconAnchor: [25, 25]
+                    }));
+                    markerStates[index] = isCurrent;
+                    hasChanges = true;
+                }
+            });
+            
+            if (hasChanges) {
+                updateFlowPanel();
+            }
+        }
+
+        // Show tier information in fixed position
+        function showTierInfo(stageIndex) {
+            const node = supplyChainNodes[stageIndex];
+            const tierInfoDisplay = document.getElementById('tierInfoDisplay');
+            
+            document.getElementById('tierNumber').textContent = `Tier ${node.tier}`;
+            document.getElementById('tierTitle').textContent = node.name;
+            document.getElementById('tierLocation').textContent = node.location;
+            document.getElementById('tierDescription').textContent = node.description;
+            
+            tierInfoDisplay.classList.add('visible');
+        }
+
+        // Hide tier information
+        function hideTierInfo() {
+            const tierInfoDisplay = document.getElementById('tierInfoDisplay');
+            tierInfoDisplay.classList.remove('visible');
+        }
+
+        // Smooth camera transition to next stage
+        function focusOnStage(stageIndex) {
+            if (stageIndex < supplyChainNodes.length) {
+                const node = supplyChainNodes[stageIndex];
+                
+                hideTierInfo();
+                
+                map.flyTo([node.lat, node.lng], 6, {
+                    duration: 2,
+                    easeLinearity: 0.1
+                });
+                
+                // Show tier info after map movement
+                setTimeout(() => {
+                    if (isAnimating) {
+                        showTierInfo(stageIndex);
+                    }
+                }, 2500);
+                
+                // Hide tier info after display time
+                setTimeout(() => {
+                    if (isAnimating) {
+                        hideTierInfo();
+                    }
+                }, 6000);
+            }
+        }
+
+        // Animation control functions
+        function startJourney() {
+            if (isAnimating) return;
+            
+            isAnimating = true;
+            currentStage = 0;
+            document.getElementById('startBtn').classList.add('active');
+            
+            document.getElementById('progressFill').style.width = '0%';
+            
+            animationInterval = setInterval(() => {
+                if (currentStage < supplyChainNodes.length) {
+                    updateConnections();
+                    updateMarkers();
+                    focusOnStage(currentStage);
+                    
+                    requestAnimationFrame(() => {
+                        const progress = ((currentStage + 1) / supplyChainNodes.length) * 100;
+                        document.getElementById('progressFill').style.width = progress + '%';
+                    });
+                    
+                    currentStage++;
+                } else {
+                    clearInterval(animationInterval);
+                    isAnimating = false;
+                    document.getElementById('startBtn').classList.remove('active');
+                    
+                    setTimeout(() => {
+                        hideTierInfo();
+                        const group = new L.featureGroup(markers);
+                        map.flyToBounds(group.getBounds().pad(0.1), {
+                            duration: 2
+                        });
+                    }, 2000);
+                }
+            }, 4000 / speed);
+        }
+
+        function resetView() {
+            isAnimating = false;
+            currentStage = 0;
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            document.getElementById('startBtn').classList.remove('active');
+            document.getElementById('progressFill').style.width = '0%';
+            
+            hideTierInfo();
+            
+            markerStates.fill(null);
+            connectionStates.fill(false);
+            
+            updateConnections();
+            updateMarkers();
+            
+            map.flyTo([20, 40], 3, {
+                duration: 2
+            });
+        }
+
+        function toggleSpeed() {
+            const speeds = [1, 2, 0.5];
+            const labels = ['1x Speed', '2x Speed', '0.5x Speed'];
+            const currentIndex = speeds.indexOf(speed);
+            const nextIndex = (currentIndex + 1) % speeds.length;
+            speed = speeds[nextIndex];
+            document.getElementById('speedBtn').textContent = labels[nextIndex];
+            
+            if (isAnimating) {
+                clearInterval(animationInterval);
+                startJourney();
+            }
+        }
+
+        // Initialize
+        initializeFlowPanel();
+        createConnections();
+        updateMarkers();
+
+        // Add initial camera movement
+        setTimeout(() => {
+            const group = new L.featureGroup(markers);
+            map.flyToBounds(group.getBounds().pad(0.1), {
+                duration: 3
+            });
+        }, 1000);
+    </script>
+</body>
+</html>
