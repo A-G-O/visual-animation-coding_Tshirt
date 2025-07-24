@@ -105,15 +105,21 @@
             font-family: inherit;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.15s ease;
             font-size: 14px;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            user-select: none;
         }
 
         .control-btn:hover {
             background: rgba(255, 255, 255, 0.1);
             transform: translateY(-2px);
             box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4);
+        }
+        
+        .control-btn:active {
+            transform: translateY(0px);
+            transition: all 0.05s ease;
         }
 
         .control-btn.active {
@@ -530,6 +536,7 @@
 
         <div class="controls-panel">
             <button class="control-btn" onclick="startJourney()" id="startBtn">Start Journey</button>
+            <button class="control-btn" onclick="pauseResume()" id="pauseBtn" style="display: none;">Pause</button>
             <button class="control-btn" onclick="resetView()">Reset</button>
             <button class="control-btn" onclick="toggleSpeed()" id="speedBtn">1x Speed</button>
         </div>
@@ -590,8 +597,11 @@
         // Animation state
         let currentStage = 0;
         let isAnimating = false;
+        let isPaused = false;
         let speed = 1;
         let animationInterval;
+        let stageStartTime = 0;
+        let stageDuration = 4000;
 
         // Supply chain data with precise coordinates (Farm to Store - Tier 0 = Farm)
         const supplyChainNodes = [
@@ -911,51 +921,115 @@
 
         // Animation control functions
         function startJourney() {
-            if (isAnimating) return;
+            if (isAnimating && !isPaused) return;
+            
+            if (isPaused) {
+                resumeAnimation();
+                return;
+            }
             
             isAnimating = true;
+            isPaused = false;
             currentStage = 0;
-            document.getElementById('startBtn').classList.add('active');
+            stageStartTime = Date.now();
+            
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('pauseBtn').style.display = 'inline-block';
+            document.getElementById('pauseBtn').textContent = 'Pause';
             
             document.getElementById('progressFill').style.width = '0%';
             
-            animationInterval = setInterval(() => {
-                if (currentStage < supplyChainNodes.length) {
-                    updateConnections();
-                    updateMarkers();
-                    focusOnStage(currentStage);
-                    
-                    requestAnimationFrame(() => {
-                        const progress = ((currentStage + 1) / supplyChainNodes.length) * 100;
-                        document.getElementById('progressFill').style.width = progress + '%';
-                    });
-                    
-                    currentStage++;
-                } else {
-                    clearInterval(animationInterval);
-                    isAnimating = false;
-                    document.getElementById('startBtn').classList.remove('active');
-                    
-                    setTimeout(() => {
-                        hideTierInfo();
-                        const group = new L.featureGroup(markers);
-                        map.flyToBounds(group.getBounds().pad(0.1), {
-                            duration: 2
-                        });
-                    }, 2000);
-                }
-            }, 4000 / speed);
+            runAnimationStep();
+        }
+        
+        function runAnimationStep() {
+            if (!isAnimating || isPaused) return;
+            
+            if (currentStage < supplyChainNodes.length) {
+                updateConnections();
+                updateMarkers();
+                focusOnStage(currentStage);
+                
+                requestAnimationFrame(() => {
+                    const progress = ((currentStage + 1) / supplyChainNodes.length) * 100;
+                    document.getElementById('progressFill').style.width = progress + '%';
+                });
+                
+                currentStage++;
+                stageStartTime = Date.now();
+                
+                animationInterval = setTimeout(() => {
+                    runAnimationStep();
+                }, stageDuration / speed);
+            } else {
+                finishAnimation();
+            }
+        }
+        
+        function finishAnimation() {
+            isAnimating = false;
+            isPaused = false;
+            
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('pauseBtn').style.display = 'none';
+            document.getElementById('startBtn').textContent = 'Start Journey';
+            
+            setTimeout(() => {
+                hideTierInfo();
+                const group = new L.featureGroup(markers);
+                map.flyToBounds(group.getBounds().pad(0.1), {
+                    duration: 2
+                });
+            }, 2000);
+        }
+        
+        function pauseResume() {
+            if (!isAnimating) return;
+            
+            if (isPaused) {
+                resumeAnimation();
+            } else {
+                pauseAnimation();
+            }
+        }
+        
+        function pauseAnimation() {
+            isPaused = true;
+            
+            if (animationInterval) {
+                clearTimeout(animationInterval);
+            }
+            
+            document.getElementById('pauseBtn').textContent = 'Resume';
+            document.getElementById('pauseBtn').classList.add('active');
+        }
+        
+        function resumeAnimation() {
+            isPaused = false;
+            
+            document.getElementById('pauseBtn').textContent = 'Pause';
+            document.getElementById('pauseBtn').classList.remove('active');
+            
+            const elapsedTime = Date.now() - stageStartTime;
+            const remainingTime = Math.max(0, (stageDuration / speed) - elapsedTime);
+            
+            animationInterval = setTimeout(() => {
+                runAnimationStep();
+            }, remainingTime);
         }
 
         function resetView() {
             isAnimating = false;
+            isPaused = false;
             currentStage = 0;
             
             if (animationInterval) {
-                clearInterval(animationInterval);
+                clearTimeout(animationInterval);
             }
             
-            document.getElementById('startBtn').classList.remove('active');
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('pauseBtn').style.display = 'none';
+            document.getElementById('startBtn').textContent = 'Start Journey';
             document.getElementById('progressFill').style.width = '0%';
             
             hideTierInfo();
@@ -979,16 +1053,45 @@
             speed = speeds[nextIndex];
             document.getElementById('speedBtn').textContent = labels[nextIndex];
             
-            if (isAnimating) {
-                clearInterval(animationInterval);
-                startJourney();
+            if (isAnimating && !isPaused) {
+                if (animationInterval) {
+                    clearTimeout(animationInterval);
+                }
+                
+                const elapsedTime = Date.now() - stageStartTime;
+                const remainingTime = Math.max(0, (stageDuration / speed) - elapsedTime);
+                
+                animationInterval = setTimeout(() => {
+                    runAnimationStep();
+                }, remainingTime);
             }
+        }
+
+        // Preload and optimize button interactions
+        function optimizeButtonResponse() {
+            const buttons = document.querySelectorAll('.control-btn');
+            buttons.forEach(button => {
+                button.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    this.style.transform = 'translateY(0px)';
+                });
+                
+                button.addEventListener('mouseup', function(e) {
+                    e.preventDefault();
+                    this.style.transform = '';
+                });
+                
+                button.addEventListener('mouseleave', function(e) {
+                    this.style.transform = '';
+                });
+            });
         }
 
         // Initialize
         initializeFlowPanel();
         createConnections();
         updateMarkers();
+        optimizeButtonResponse();
 
         // Add initial camera movement
         setTimeout(() => {
